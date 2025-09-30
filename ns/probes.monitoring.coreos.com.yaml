@@ -1,0 +1,23 @@
+apiVersion: v1
+items:
+- apiVersion: monitoring.coreos.com/v1
+  kind: Probe
+  metadata:
+    labels:
+      pick: by-all-prom
+    name: blackbox-http-external
+    namespace: monitoring
+  spec:
+    interval: 30s
+    module: http_2xx
+    prober:
+      path: /probe
+      url: blackbox-exporter.monitoring.svc.cluster.local:19115
+    scrapeTimeout: 10s
+    targets:
+      staticConfig:
+        static:
+        - https://google.com
+        - https://www.udemy.com
+kind: List
+metadata: {}

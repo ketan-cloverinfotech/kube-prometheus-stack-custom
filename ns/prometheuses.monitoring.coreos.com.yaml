@@ -1,0 +1,67 @@
+apiVersion: v1
+items:
+- apiVersion: monitoring.coreos.com/v1
+  kind: Prometheus
+  metadata:
+    name: apps
+    namespace: monitoring
+  spec:
+    evaluationInterval: 30s
+    externalLabels:
+      THANOS_TENANT: default-tenant
+      cluster: cluster-1
+      prometheus: monitoring/apps
+    podMonitorSelector:
+      matchLabels:
+        scraped-by: apps
+    portName: web
+    replicaExternalLabelName: prometheus_replica
+    replicas: 2
+    retention: 15d
+    scrapeConfigSelector:
+      matchLabels:
+        scraped-by: apps
+    scrapeInterval: 30s
+    scrapeProtocols:
+    - OpenMetricsText1.0.0
+    - OpenMetricsText0.0.1
+    - PrometheusProto
+    - PrometheusText0.0.4
+    serviceMonitorSelector:
+      matchLabels:
+        scraped-by: apps
+    thanos:
+      baseImage: quay.io/thanos/thanos
+      blockSize: 2h
+      image: quay.io/thanos/thanos:v0.35.1
+      listenLocal: false
+      version: v0.36.2
+    walCompression: true
+- apiVersion: monitoring.coreos.com/v1
+  kind: Prometheus
+  metadata:
+    name: k8s
+    namespace: monitoring
+  spec:
+    evaluationInterval: 30s
+    externalLabels:
+      THANOS_TENANT: default-tenant
+      cluster: cluster-1
+      prometheus: monitoring/k8s
+    portName: web
+    replicaExternalLabelName: prometheus_replica
+    replicas: 2
+    scrapeInterval: 30s
+    scrapeProtocols:
+    - OpenMetricsText1.0.0
+    - OpenMetricsText0.0.1
+    - PrometheusProto
+    - PrometheusText0.0.4
+    serviceAccountName: prometheus-k8s
+    thanos:
+      blockSize: 2h
+      image: quay.io/thanos/thanos:v0.34.1
+      listenLocal: false
+      version: v0.34.1
+kind: List
+metadata: {}

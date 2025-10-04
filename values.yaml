@@ -2,50 +2,95 @@
 # kube-prometheus-stack (Prometheus, Alertmanager, Grafana)
 # ────────────────────────────────────────────────────────────────────────────────
 kube-prometheus-stack:
-  fullnameOverride: "kps"   # keeps stable names (e.g., kps-thanos-discovery)
+  fullnameOverride: "kps"
 
   grafana:
     enabled: true
     adminUser: admin
     # adminPassword: "changeme"
 
-    # EXPOSE GRAFANA VIA NODEPORT
     service:
       type: NodePort
       port: 80
       nodePort: 32000
 
-    # Add Thanos + Loki + Tempo as datasources
-    additionalDataSources:
-      - name: Thanos
-        uid: thanos
-        type: prometheus
-        access: proxy
-        url: http://thanos-query.monitoring.svc.cluster.local:10902
-        isDefault: false
-        jsonData:
-          httpMethod: POST
+    # Ensure Grafana loads provisioning files
+    sidecar:
+      datasources:
+        enabled: true
 
-      - name: Loki
-        uid: loki
-        type: loki
-        access: proxy
-        url: http://loki.monitoring.svc.cluster.local:3100
-        isDefault: false
+    # Strong, deterministic provisioning with stable UIDs
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
 
-      - name: Tempo
-        uid: tempo
-        type: tempo
-        access: proxy
-        url: http://tempo.monitoring.svc.cluster.local:3200
-        jsonData:
-          httpMethod: GET
-          tracesToLogs:
-            datasourceUid: loki
-            mapTagNamesEnabled: true
-            tags: ["namespace", "pod", "container"]
-          serviceMap:
-            datasourceUid: thanos  # or point to Prometheus if you prefer
+        # Cleanly replace any existing entries with same name/uid
+        deleteDatasources:
+          - name: Thanos
+            uid: thanos
+          - name: Loki
+            uid: loki
+          - name: Tempo
+            uid: tempo
+
+        datasources:
+          # --- Thanos (Prometheus) ---
+          - name: Thanos
+            uid: thanos
+            type: prometheus
+            access: proxy
+            url: http://thanos-query.monitoring.svc.cluster.local:10902
+            isDefault: false
+            jsonData:
+              httpMethod: POST
+              # optional: let metrics exemplars link to Tempo traces
+              exemplarTraceIdDestinations:
+                - datasourceUid: tempo
+                  name: Tempo
+            editable: false
+
+          # --- Loki (Logs) ---
+          - name: Loki
+            uid: loki
+            type: loki
+            access: proxy
+            url: http://loki.monitoring.svc.cluster.local:3100
+            isDefault: false
+            jsonData:
+              # Link logs → traces (supports either trace_id or traceId fields)
+              derivedFields:
+                - name: trace_id
+                  matcherRegex: '"trace_id"\\s*:\\s*"([a-fA-F0-9\\-]+)"'
+                  datasourceUid: tempo
+                  internalLink: true
+                - name: traceId
+                  matcherRegex: '"traceId"\\s*:\\s*"([a-fA-F0-9\\-]+)"'
+                  datasourceUid: tempo
+                  internalLink: true
+            editable: false
+
+          # --- Tempo (Traces) ---
+          - name: Tempo
+            uid: tempo
+            type: tempo
+            access: proxy
+            url: http://tempo.monitoring.svc.cluster.local:3200
+            isDefault: false
+            jsonData:
+              httpMethod: GET
+              # Traces → Logs (pivot from a span to relevant logs)
+              tracesToLogs:
+                datasourceUid: loki
+                mapTagNamesEnabled: true
+                tags: ["namespace", "pod", "container"]
+                filterByTraceID: true
+                filterBySpanID: true
+              # Service graph uses your metrics source
+              serviceMap:
+                datasourceUid: thanos
+              nodeGraph:
+                enabled: true
+            editable: false
 
   prometheus:
     thanosService:
